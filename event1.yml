@@ -1,0 +1,133 @@
+events:
+  ore_overload:
+    type: individual
+    trigger: block_break
+    duration: 45min
+    cooldown_between_runs: 1h
+
+    conditions:
+      blocks: [any_ore]
+      gamemodes: [survival]
+      natural_blocks_only: true
+
+    rewards:
+      commands:
+        - console: "eco give {player} 300"
+      xp:
+        amount: "3-10"
+        chance: 90
+
+    rewards_by_type:
+
+      coal_ore:
+        points: 1
+        rewards:
+          commands:
+            - console: "eco give {player} 500"
+
+      iron_ore:
+        points: 2
+        rewards:
+          commands:
+            - console: "eco give {player} 1000"
+
+      copper_ore:
+        points: 1
+        rewards:
+          commands:
+            - console: "eco give {player} 700"
+
+      redstone_ore:
+        points: 2
+        rewards:
+          commands:
+            - console: "eco give {player} 1200"
+
+      lapis_ore:
+        points: 3
+        rewards:
+          commands:
+            - console: "eco give {player} 1500"
+
+      gold_ore:
+        points: 4
+        rewards:
+          commands:
+            - console: "eco give {player} 2500"
+            - console: "coins give {player} 50"
+              chance: 10
+
+      emerald_ore:
+        points: 6
+        rewards:
+          commands:
+            - console: "eco give {player} 5000"
+            - console: "coins give {player} 120"
+              chance: 20
+
+      diamond_ore:
+        points: 10
+        rewards:
+          commands:
+            - console: "eco give {player} 10000"
+            - console: "coins give {player} 300"
+              chance: 25
+
+      ancient_debris:
+        points: 15
+        rewards:
+          commands:
+            - console: "eco give {player} 20000"
+            - console: "coins give {player} 500"
+              chance: 35
+
+      _default:
+        points: 1
+        rewards:
+          commands:
+            - console: "eco give {player} 400"
+
+    scoring:
+      enabled: true
+      metric: triggers
+
+    leaderboard:
+      top_size: 3
+      end_rewards:
+        "1":
+          commands:
+            - console: "eco give {player} 2000000"
+            - console: "coins give {player} 5000"
+        "2":
+          commands:
+            - console: "eco give {player} 1000000"
+            - console: "coins give {player} 3000"
+        "3":
+          commands:
+            - console: "eco give {player} 500000"
+            - console: "coins give {player} 2000"
+
+    announcements:
+      on_start:
+        broadcast: "<gradient:gold:yellow><bold>ORE OVERLOAD STARTED!</bold></gradient>"
+        subtitle: "<yellow>Mine ores & earn huge rewards!</yellow>"
+        sound: "ui.toast.challenge_complete"
+
+      on_trigger:
+        actionbar: "&6+Ore Reward!"
+        sounds:
+          - sound: "block.amethyst_cluster.break"
+            pitch: 1.3
+          - sound: "entity.experience_orb.pickup"
+            pitch: 1.9
+            delay: 80ms
+
+      on_end:
+        broadcast: "&6Ore Overload ended! Winner: {top_player} ({top_score})"
+        sound: "entity.player.levelup"
+
+      on_player_join: "&6[Ore Overload] Active! Rank #{rank} | {score} ores | {time_left}"
+
+      interval_broadcast:
+        every: 5min
+        message: "&6[Ore Overload] Active! {time_left} left!"
