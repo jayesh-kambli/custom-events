@@ -1,0 +1,113 @@
+events:
+  killer_frenzy:
+    type: individual
+    trigger: entity_kill
+    duration: 40min
+    cooldown_between_runs: 1h
+
+    conditions:
+      gamemodes: [survival]
+
+    rewards:
+      commands:
+        - console: "eco give {player} 500"
+      xp:
+        amount: "5-15"
+        chance: 80
+
+    rewards_by_type:
+
+      zombie:
+        points: 1
+        rewards:
+          commands:
+            - console: "eco give {player} 800"
+          give:
+            - item: rotten_flesh
+              amount: "2-4"
+              chance: 100
+
+      skeleton:
+        points: 2
+        rewards:
+          commands:
+            - console: "eco give {player} 1200"
+          give:
+            - item: bone
+              amount: "2-5"
+              chance: 100
+
+      creeper:
+        points: 3
+        rewards:
+          commands:
+            - console: "eco give {player} 2500"
+            - console: "coins give {player} 50"
+              chance: 15
+
+      enderman:
+        points: 5
+        rewards:
+          commands:
+            - console: "eco give {player} 6000"
+            - console: "coins give {player} 150"
+              chance: 25
+
+      blaze:
+        points: 6
+        rewards:
+          commands:
+            - console: "eco give {player} 8000"
+            - console: "coins give {player} 200"
+              chance: 30
+
+      _default:
+        points: 1
+        rewards:
+          commands:
+            - console: "eco give {player} 700"
+
+    scoring:
+      enabled: true
+      metric: mobs_killed
+
+    leaderboard:
+      top_size: 3
+      end_rewards:
+        "1":
+          commands:
+            - console: "eco give {player} 2000000"
+            - console: "coins give {player} 5000"
+        "2":
+          commands:
+            - console: "eco give {player} 1000000"
+            - console: "coins give {player} 3000"
+        "3":
+          commands:
+            - console: "eco give {player} 500000"
+            - console: "coins give {player} 2000"
+
+    announcements:
+      on_start:
+        broadcast: "<gradient:red:gold><bold>KILLER FRENZY STARTED!</bold></gradient>"
+        subtitle: "<yellow>Kill mobs & dominate the leaderboard!</yellow>"
+        sound: "entity.wither.spawn"
+
+      on_trigger:
+        actionbar: "&c+Kill Reward!"
+        sounds:
+          - sound: "entity.player.attack.crit"
+            pitch: 1.4
+          - sound: "entity.experience_orb.pickup"
+            pitch: 1.8
+            delay: 80ms
+
+      on_end:
+        broadcast: "&cKiller Frenzy ended! Winner: {top_player} ({top_score})"
+        sound: "entity.wither.death"
+
+      on_player_join: "&c[Killer Frenzy] Ongoing! Rank #{rank} | {score} kills | {time_left}"
+
+      interval_broadcast:
+        every: 5min
+        message: "&c[Killer Frenzy] Active! {time_left} left!"
