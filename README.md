@@ -20,9 +20,12 @@ This file is the single source of truth for all fields, values, and placeholders
    - [Target, Milestones & Auto-Multiplier (Global)](#38-target-milestones--auto-multiplier-global-events)
    - [Scheduling](#39-scheduling)
    - [Event Chaining](#310-event-chaining)
+   - [Participation Cooldown](#311-participation-cooldown)
 4. [Placeholders](#4-placeholders)
-5. [Admin Commands](#5-admin-commands)
-6. [Permissions](#6-permissions)
+5. [Persistence & Crash Safety](#5-persistence--crash-safety)
+6. [Admin Commands](#6-admin-commands)
+7. [Permissions](#7-permissions)
+8. [Discord Webhook](#8-discord-webhook)
 
 ---
 
@@ -31,11 +34,13 @@ This file is the single source of truth for all fields, values, and placeholders
 ```yml
 settings:
   glow_enabled: false
+  discord_webhook: "https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN"
 ```
 
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `glow_enabled` | boolean | `false` | Adds a hidden Unbreaking enchant to reward items so they visually shimmer. **Keep `false` if you run an anti-illegal-items plugin** — it will delete those items on sight. |
+| `discord_webhook` | string | none | Global Discord webhook URL. When set, the plugin posts an embed to this channel on every event start, end, or goal completion. Can be overridden per event. See [Discord Webhook](#8-discord-webhook). |
 
 ---
 
@@ -93,6 +98,8 @@ events:
 | `completion_rewards` | section | no | Reward given to all players when goal is reached (global events only). |
 | `schedule` | section | no | Auto start/stop times. |
 | `on_end.start_event` | string | no | Name of event to auto-start when this one ends (chaining). |
+| `cooldown_between_runs` | duration | none | Minimum time that must pass after this event ends before it can start again. Applies to both manual `/event start` and the scheduler. See [Participation Cooldown](#311-participation-cooldown). |
+| `discord_webhook` | string | none | Per-event Discord webhook URL. Overrides `settings.discord_webhook` for this event only. |
 
 ---
 
@@ -405,6 +412,21 @@ Fires when the event timer expires without reaching the goal.
 |---|---|---|
 | `broadcast` | string | Chat message explaining the goal was not reached. |
 
+#### on_player_join
+
+Sent privately to a player who joins the server while the event is already running — so they immediately know what's happening and can participate.
+
+```yml
+announcements:
+  on_player_join: "&6[Gold Rush] An event is running! Mine gold ores — Rank #{rank} with {score} pts. {time_left} left!"
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `on_player_join` | string | Private message to the joining player. Supports `{rank}`, `{score}`, `{time_left}`, and all other placeholders. |
+
+> The message is sent only once, right after the player finishes loading in. If the event ended before they fully joined they won't receive it.
+
 #### interval_broadcast
 
 Repeating reminder message while the event is active.
@@ -558,6 +580,20 @@ leaderboard:
 | `top_size` | integer | How many top players are tracked and rewarded. |
 | `end_rewards` | map | Keys are rank numbers (`"1"`, `"2"`, `"3"`). Each supports `commands`, `drops`, `give`, `xp`, `effects`. |
 
+#### Offline Player Rewards
+
+Players who disconnect before the event ends **still receive their leaderboard rank**. The plugin caches every participant's name during the event, so when the event finishes:
+
+- **Online players** — receive full rewards (items, drops, XP, effects, commands).
+- **Offline players** — receive **console commands only**. Item drops and effects cannot be applied to offline players, but economy commands (e.g. `eco give {player} 10000`) work fine because most economy plugins accept offline player names.
+
+A log entry is written to console for every offline reward:
+```
+[CustomEvents] Offline leaderboard reward for Steve (rank #1, score 47) — commands only.
+```
+
+> **Tip:** Use economy commands for rank 1 prizes — they're offline-safe. Save physical items for participation drops that fire when players are actively playing.
+
 ---
 
 ### 3.8 Target, Milestones & Auto-Multiplier (Global Events)
@@ -707,6 +743,31 @@ Use this to build multi-phase events. The chained event starts within ~1 second 
 
 ---
 
+### 3.11 Participation Cooldown
+
+Prevents an event from restarting too soon after it ends — whether by the scheduler or an admin.
+
+```yml
+  gold_rush:
+    cooldown_between_runs: 1h    # can't restart for 1 hour after it ends
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `cooldown_between_runs` | duration | none | Minimum time between the end of one run and the start of the next. Uses standard [duration format](#33-duration-format). |
+
+**Behaviour:**
+
+- If an admin runs `/event start <name>` while on cooldown, they receive: `"Event 'gold_rush' is on cooldown: 58m 12s remaining."` — and the event does not start.
+- The scheduler silently skips the event until the cooldown clears.
+- The cooldown starts from the moment the event ends (any reason: completed, time expired, or manual stop).
+- To disable, remove the field or set `cooldown_between_runs: 0s`.
+
+**Global events + early completion:**  
+If a global event finishes its goal before the time window closes, the scheduler will **not** restart it within the same window — even without a cooldown set. This is tracked automatically per schedule window. The `cooldown_between_runs` field adds an additional time-based lock on top of this.
+
+---
+
 ## 4. Placeholders
 
 Available in all text fields: `broadcast`, `title`, `subtitle`, `actionbar`, `bossbar.text`, `commands`, `interval_broadcast.message`, `announce`, `milestone.broadcast`.
@@ -726,6 +787,38 @@ Available in all text fields: `broadcast`, `title`, `subtitle`, `actionbar`, `bo
 | `{time_left}` | Human-readable time remaining (`12m 30s`) | All |
 | `{trigger_count}` | Total server-wide trigger count | All |
 | `{next_start}` | Next scheduled start time | `on_end_incomplete` |
+
+#### Text Formatting
+
+All text fields support two formatting systems — you can mix them freely within a single config.
+
+**Legacy `&` codes** — simple and familiar:
+```
+&6Gold Rush &ehas &lstarted!
+```
+
+**MiniMessage** — rich gradient, hover, click, and more. Use `<` tags:
+```
+<gold><bold>Gold Rush</bold></gold> <yellow>has started!</yellow>
+<gradient:gold:yellow>Mine ores for rewards!</gradient>
+```
+
+The plugin auto-detects which format you're using: if the text contains `<`, it's parsed as MiniMessage; otherwise `&` codes are used. You can mix both systems across different fields, but not within a single field value.
+
+**Common MiniMessage tags:**
+
+| Tag | Effect |
+|---|---|
+| `<gold>` | Gold color (works for all named colors) |
+| `<#FF5733>` | Hex color |
+| `<bold>` / `<b>` | Bold |
+| `<italic>` / `<i>` | Italic |
+| `<underlined>` | Underline |
+| `<gradient:color1:color2>` | Gradient between two colors |
+| `<rainbow>` | Rainbow gradient |
+| `<reset>` | Reset all formatting |
+
+Full MiniMessage reference: [docs.advntr.dev/minimessage](https://docs.advntr.dev/minimessage/format.html)
 
 #### Color Codes
 
@@ -752,7 +845,34 @@ Use `&` followed by a code anywhere text is accepted.
 
 ---
 
-## 5. Admin Commands
+## 5. Persistence & Crash Safety
+
+CustomEvents uses a single **SQLite database** (`plugins/CustomEvents/custom_events.db`) as its persistence layer. No external database server needed — it's embedded in the jar.
+
+### What is stored
+
+| Data | Table | Notes |
+|---|---|---|
+| Running event state (scores, counters, multipliers) | `active_states` | Auto-saved every 30 s |
+| Player name cache | `player_names` | Used for offline reward commands |
+| Event run history | `event_history` | Permanent log — viewable via `/event history` |
+| Cooldown timestamps | `event_meta` | `last_ended_at` per event |
+| Early-completion window tracking | `event_meta` | Prevents global events restarting in same window |
+| Per-player cooldowns | *(memory only)* | Resets on restart |
+
+### How crash recovery works
+
+- **Auto-save** — every 30 seconds, all running events write their full state (scores, global counter, multiplier, milestones, player names) to the database. Worst-case data loss on a crash: 30 seconds.
+- **Clean shutdown** — on `/stop` or `/reload`, a final save runs before bossbars and tasks are torn down. Zero data lost on a clean stop.
+- **Restore on startup** — the plugin reads `active_states` on enable and recreates all events that haven't expired. Bossbars reappear when players rejoin. Events that expired while the server was offline are discarded automatically.
+
+### Database file
+
+`plugins/CustomEvents/custom_events.db` — a standard SQLite file. You can open it with [DB Browser for SQLite](https://sqlitebrowser.org/) to inspect or clear history records. Do not edit `active_states` while the server is running.
+
+---
+
+## 6. Admin Commands
 
 All commands require the `customevents.admin` permission.
 
@@ -770,10 +890,31 @@ All commands require the `customevents.admin` permission.
 | `/event leaderboard <name>` | Show the current top players for an individual event |
 | `/event reset <name>` | Reset all scores, counts, cooldowns, and multiplier for a running event |
 | `/event simulate <name> <player>` | Fire a test trigger for a player (useful for testing reward configs) |
+| `/event history [name] [page]` | View past event runs. Omit `name` for all events. Page defaults to 1, 5 entries per page. |
+
+#### History output example
+
+```
+=== Event History (page 1) ===
+#12  gold_rush    — ✓ completed   — May 01 20:47  [scheduled]
+     Participants: 8   Triggers: 312
+     Top: #1 Steve (47), #2 Alex (32), #3 Bob (18)
+#11  redstone_rally — ⏰ time expired — May 01 15:02  [scheduled]
+     Participants: 5   Triggers: 4821
+#10  diamond_rush — ✗ stopped     — Apr 30 12:00  [manual]
+     Participants: 1   Triggers: 7
+```
+
+| Column | Meaning |
+|---|---|
+| `✓ completed` | Global event reached its goal before time ran out |
+| `⏰ time expired` | Timer ran out (goal not reached, or individual event ended naturally) |
+| `✗ stopped` | Admin called `/event stop` |
+| `[scheduled]` / `[manual]` | Whether the event was started by the scheduler or by a command |
 
 ---
 
-## 6. Permissions
+## 7. Permissions
 
 | Node | Default | Description |
 |---|---|---|
@@ -781,3 +922,62 @@ All commands require the `customevents.admin` permission.
 | `customevents.participate` | Everyone | Required to receive rewards when `conditions.permission` is set to this node |
 
 > To restrict participation in a specific event, set `conditions.permission: customevents.participate` and revoke the node from players who should be excluded, or use a custom permission node like `events.vip` and grant it only to certain groups.
+
+---
+
+## 8. Discord Webhook
+
+Automatically posts embed messages to a Discord channel when events start, end, or reach their goal.
+
+### Setup
+
+**Option A — Global (all events post to the same channel):**
+```yml
+settings:
+  discord_webhook: "https://discord.com/api/webhooks/1234567890/abcdef..."
+```
+
+**Option B — Per event (each event has its own channel):**
+```yml
+events:
+  gold_rush:
+    discord_webhook: "https://discord.com/api/webhooks/..."   # overrides global
+
+  redstone_rally:
+    discord_webhook: "https://discord.com/api/webhooks/..."   # different channel
+```
+
+Per-event webhook takes priority over the global one. If neither is set, Discord notifications are disabled.
+
+### How to get a webhook URL
+
+1. Open your Discord server → **Server Settings → Integrations → Webhooks**.
+2. Click **New Webhook**, choose the channel, copy the URL.
+3. Paste it into `config.yml`.
+
+### What gets posted
+
+| Event | Title | Color | Fields |
+|---|---|---|---|
+| Event starts | `🎉 gold_rush — Started` | Gold | Type, Trigger, Duration |
+| Event ends (completed goal) | `✅ gold_rush — Completed!` | Green | Top Player, Participants |
+| Event ends (time expired) | `⏰ gold_rush — Time's Up` | Grey | Top Player, Participants |
+| Event manually stopped | `🛑 gold_rush — Stopped` | Red | Top Player, Participants |
+
+### Example embed
+
+```
+🎉 gold_rush — Started
+─────────────────────────────
+Type          Trigger       Duration
+Individual    block_break   30m
+─────────────────────────────
+CustomEvents
+```
+
+### Notes
+
+- Posts are sent **asynchronously** — they never lag the server.
+- If Discord is down or the URL is wrong, a `WARNING` is logged but the plugin continues normally.
+- Delivery is **fire-and-forget** — the plugin does not retry failed posts.
+- The top player shown at event end includes **offline players** — names are resolved from the in-event cache.
